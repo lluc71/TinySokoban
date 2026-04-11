@@ -1946,8 +1946,9 @@ MonoBehaviour:
   playerPrefab: {fileID: 7101697780857863627, guid: 435a9a9edfd3ffb45a54a4aeb8573041, type: 3}
   boxPrefab: {fileID: -5965721277598830312, guid: 4a35dbe5cdc4b0c468abf79790ee2b37, type: 3}
   entitiesParent: {fileID: 2123457837}
-  width: 8
-  height: 8
+  mainCamera: {fileID: 519420031}
+  cameraPadding: 0.5
+  levelFile: {fileID: 4900000, guid: fb50b6c7d3529e74290d8b944f575c46, type: 3}
 --- !u!1 &2123457836
 GameObject:
   m_ObjectHideFlags: 0

@@ -17,7 +17,12 @@ public class LevelManager : MonoBehaviour
     [SerializeField] private BoxView boxPrefab;
     [SerializeField] private Transform entitiesParent;
 
-    //[SerializeField] private TextAsset levelFile;
+    [Header("Config. Cámara")]
+    [SerializeField] private Camera mainCamera;
+    [SerializeField] private float cameraPadding = 0.5f;
+
+    [Header("Fichero del Nivel")]
+    [SerializeField] private TextAsset levelFile;
 
     private int width = 8;
     private int height = 8;
@@ -34,6 +39,7 @@ public class LevelManager : MonoBehaviour
     {
         GenerateLevel();
         SpawnLevelVisuals();
+        FitCameraToLevel();
 
         //CheckLevel();
     }
@@ -103,8 +109,20 @@ public class LevelManager : MonoBehaviour
         movedBoxView.SetTile(newPos);
     }
 
-    //TODO: Eliminar o modificar por algo leido de un TXT o un LevelData
     public void GenerateLevel()
+    {
+        if (levelFile == null)
+        {
+            Debug.LogError("No se ha encontrado el archivo del nivel.");
+            return;
+        }
+
+        levelCompleted = false;
+        LoadLevelFromText();
+    }
+
+    //TODO: Eliminar o modificar por algo leido de un TXT o un LevelData
+    public void GenerateLevelDeprecated()
     {
         levelCompleted = false;
 
@@ -232,6 +250,130 @@ public class LevelManager : MonoBehaviour
             Destroy(entitiesParent.GetChild(i).gameObject);
         }
     }
+    private void FitCameraToLevel()
+    {
+        if (mainCamera == null) mainCamera = Camera.main;
+
+        if (mainCamera == null || !mainCamera.orthographic) return;
+
+        float aspect = (float)Screen.width / Screen.height;
+
+        float halfHeight = height / 2f;
+        float halfWidthAdjusted = width / (2f * aspect);
+
+        mainCamera.orthographicSize = Mathf.Max(halfHeight, halfWidthAdjusted) + cameraPadding;
+
+        // Centrar cámara en el mapa
+        float centerX = width / 2f;
+        float centerY = height / 2f;
+
+        Vector3 camPos = mainCamera.transform.position;
+        mainCamera.transform.position = new Vector3(centerX, centerY, camPos.z);
+    }
 
 
+    /*
+     * **************************
+     * GENERADOR DE NIVELES
+     ****************************
+     */
+    private void LoadLevelFromText()
+    {
+        string levelText = levelFile.text;
+        boxPositions.Clear();
+        boxViews.Clear();
+
+        if (string.IsNullOrWhiteSpace(levelText))
+        {
+            Debug.LogError("El fichero está vacío.");
+            return;
+        }
+
+        string[] rawLines = levelText
+            .Replace("\r", "")
+            .Split('\n', System.StringSplitOptions.RemoveEmptyEntries);
+
+        // Comprobamos el tamaño del mapa
+        string[] sizeParts = rawLines[0].Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
+        if (sizeParts.Length < 2 || !int.TryParse(sizeParts[0], out width) || !int.TryParse(sizeParts[1], out height))
+        {
+            Debug.LogError("La primera línia del fichero debe contener: Width y Height");
+            return;
+        }
+
+        if (rawLines.Length - 1 < height)
+        {
+            Debug.LogError($"El fichero no tiene suficientes filas. Esperadas: {height}");
+            return;
+        }
+
+        tiles = new TileType[width, height];
+
+        bool playerFound = false;
+
+        // Leemos desde arriba hacia abajo en el txt, pero en el array lo guardamos con y=0 abajo.
+        for (int fileRow = 0; fileRow < height; fileRow++)
+        {
+            string line = rawLines[fileRow + 1];
+
+            if (line.Length < width)
+            {
+                Debug.LogError($"La fila {fileRow + 1} no tiene suficientes columnas. Esperadas: {width}");
+                return;
+            }
+
+            int y = height - 1 - fileRow;
+
+            for (int x = 0; x < width; x++)
+            {
+                char c = line[x];
+
+                switch (c)
+                {
+                    case '#':
+                        tiles[x, y] = TileType.Wall;
+                        break;
+
+                    case '.':
+                        tiles[x, y] = TileType.Floor;
+                        break;
+
+                    case 'G':
+                        tiles[x, y] = TileType.Goal;
+                        break;
+
+                    case 'P':
+                        tiles[x, y] = TileType.Floor;
+                        playerPos = new Vector2Int(x, y);
+                        playerFound = true;
+                        break;
+
+                    case 'B':
+                        tiles[x, y] = TileType.Floor;
+                        boxPositions.Add(new Vector2Int(x, y));
+                        break;
+
+                    case '+': // Player sobre Goal
+                        tiles[x, y] = TileType.Goal;
+                        playerPos = new Vector2Int(x, y);
+                        playerFound = true;
+                        break;
+
+                    case '*': // Box sobre Goal
+                        tiles[x, y] = TileType.Goal;
+                        boxPositions.Add(new Vector2Int(x, y));
+                        break;
+
+                    default:
+                        Debug.LogError($"Carácter no reconocido '{c}' en ({x}, {y}).");
+                        return;
+                }
+            }
+        }
+
+        if (!playerFound)
+        {
+            Debug.LogError("El nivel no contiene un jugador ('P' o '+').");
+        }
+    }
 }
