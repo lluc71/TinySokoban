@@ -1,6 +1,8 @@
 # Tiny Sokoban
 Un juego que reimplementa el clásico **Sokoban**, donde controlas a un pastor que debe guiar ovejas hasta sus posiciones objetivo.
 
+<div align="center"> <img src="Screenshots/Juego.png" width="500"> </div>
+
 ---
 
 ## Características
