@@ -2,5 +2,5 @@ using UnityEngine;
 
 public enum TileType
 {
-    Empty, Floor, Wall, Goal
+    Floor, Wall, Goal, Empty
 }

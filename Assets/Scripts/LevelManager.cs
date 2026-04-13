@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class LevelManager : MonoBehaviour
 {
@@ -21,6 +23,11 @@ public class LevelManager : MonoBehaviour
     [SerializeField] private Camera mainCamera;
     [SerializeField] private float cameraPadding = 0.5f;
 
+    [Header("Elementos UI")]
+    [SerializeField] private GameObject victoryPopup;
+    [SerializeField] private TMP_Text levelTextUI;
+
+
     [Header("Fichero del Nivel")]
     [SerializeField] private TextAsset levelFile;
 
@@ -37,11 +44,14 @@ public class LevelManager : MonoBehaviour
 
     private void Start()
     {
+        if (LevelSelectorManager.Instance == null) return;
+
+        GetFileToLoad(LevelSelectorManager.Instance.CurrentLevelName);
         GenerateLevel();
         SpawnLevelVisuals();
         FitCameraToLevel();
 
-        //CheckLevel();
+        levelTextUI.text = $"Nivel: {LevelSelectorManager.Instance.GetCurrentLevelNumber()}";
     }
 
     public bool IsLevelCompleted()
@@ -69,7 +79,23 @@ public class LevelManager : MonoBehaviour
             MovePlayer(target);
         }
 
-        //CheckVictory();
+        CheckVictory();
+    }
+
+    private void CheckVictory()
+    {
+        if (boxPositions.Count == 0) return;
+
+        foreach (Vector2Int boxPos in boxPositions)
+        {
+            if (tiles[boxPos.x, boxPos.y] != TileType.Goal)
+                return;
+        }
+
+        levelCompleted = true;
+
+        if (victoryPopup != null)
+            victoryPopup.SetActive(true);
     }
 
     public bool IsOutside(Vector2Int pos)
@@ -120,53 +146,6 @@ public class LevelManager : MonoBehaviour
         levelCompleted = false;
         LoadLevelFromText();
     }
-
-    //TODO: Eliminar o modificar por algo leido de un TXT o un LevelData
-    public void GenerateLevelDeprecated()
-    {
-        levelCompleted = false;
-
-        tiles = new TileType[width, height];
-        boxPositions.Clear();
-        boxViews.Clear();
-
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                tiles[x, y] = TileType.Floor;
-            }
-        }
-
-        // Bordes
-        for (int x = 0; x < width; x++)
-        {
-            tiles[x, 0] = TileType.Wall;
-            tiles[x, height - 1] = TileType.Wall;
-        }
-
-        for (int y = 0; y < height; y++)
-        {
-            tiles[0, y] = TileType.Wall;
-            tiles[width - 1, y] = TileType.Wall;
-        }
-
-        // Paredes internas
-        tiles[3, 3] = TileType.Wall;
-        tiles[3, 4] = TileType.Wall;
-
-        // Objetivos
-        tiles[5, 2] = TileType.Goal;
-        tiles[5, 3] = TileType.Goal;
-
-        // Jugador
-        playerPos = new Vector2Int(2, 2);
-
-        // Cajas
-        boxPositions.Add(new Vector2Int(4, 2));
-        boxPositions.Add(new Vector2Int(4, 3));
-    }
-
 
     //TODO: Mover a un LevelViewSpawner
     private void SpawnLevelVisuals()
@@ -375,5 +354,21 @@ public class LevelManager : MonoBehaviour
         {
             Debug.LogError("El nivel no contiene un jugador ('P' o '+').");
         }
+    }
+
+    private void GetFileToLoad(string levelName)
+    {
+        if (string.IsNullOrEmpty(levelName)) return;
+
+        TextAsset loaded = Resources.Load<TextAsset>($"Levels/{levelName}");
+
+        if (loaded == null)
+        {
+            Debug.LogError($"No se encontró el nivel: {levelName}");
+            SceneManager.LoadScene("MainMenu");
+            return;
+        }
+
+        levelFile = loaded;
     }
 }

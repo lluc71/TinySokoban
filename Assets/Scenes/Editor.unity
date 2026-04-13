@@ -2457,7 +2457,7 @@ MonoBehaviour:
   goalSprite: {fileID: 21300000, guid: e33037681e89ee04c91a0bfb7d9321e3, type: 3}
   boxSprite: {fileID: 21300000, guid: a20bd636c7f741e49aa679dd85ca9ab7, type: 3}
   playerSprite: {fileID: 21300000, guid: 90401a50516f05a46a132ce2e54bb104, type: 3}
-  levelsFolderName: Levels
+  levelsFolderName: Resources/Levels
   filePrefix: level_
 --- !u!1 &1688924392
 GameObject:
@@ -3375,6 +3375,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 93be7dc9656463c4c91a53fb30f220c8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MainMenuManager
+  levelSelectorPanel: {fileID: 0}
+  loadDelay: 1
 --- !u!4 &1841521819
 Transform:
   m_ObjectHideFlags: 0

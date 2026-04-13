@@ -24,8 +24,10 @@ public class GeneratorManager : MonoBehaviour
     [SerializeField] private Sprite playerSprite;
 
     [Header("Exportación")]
-    [SerializeField] private string levelsFolderName = "Levels";
+    [SerializeField] private string levelsFolderName = "Resources/Levels";
     [SerializeField] private string filePrefix = "level_";
+
+    private TextAsset levelToLoad;
 
     private int width;
     private int height;
@@ -46,7 +48,15 @@ public class GeneratorManager : MonoBehaviour
 
     void Start()
     {
-        UpdateGrid();
+        if (LevelSelectorManager.Instance != null && LevelSelectorManager.Instance.IsEditingLoadedLevel)
+        {
+            GetFileToLoad(LevelSelectorManager.Instance.CurrentLevelName);
+            LoadLevelFromFile();
+        }
+        else
+        {
+            UpdateGrid();
+        }
     }
 
     /**
@@ -56,39 +66,10 @@ public class GeneratorManager : MonoBehaviour
     {
         if(!CheckInputs()) return;
 
-        baseTiles = new TileType[width, height];
-        tileViews = new LevelEditorTileView[width, height];
-        boxPositions.Clear();
-        playerPos = null;
+        ResetGridData();
+        UpdateVisualGrid();
 
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                baseTiles[x, y] = TileType.Floor;
-            }
-        }
-
-        ClearBoard();
-
-        if (gridLayoutGroup != null)
-        {
-            gridLayoutGroup.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-            gridLayoutGroup.constraintCount = width;
-        }
-
-        for (int y = height - 1; y >= 0; y--)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                LevelEditorTileView tile = Instantiate(tilePrefab, boardParent);
-                tile.Init(this, new Vector2Int(x, y));
-                tileViews[x, y] = tile;
-                RefreshTileVisual(x, y);
-            }
-        }
-
-        SetFeedback($"Grid {width}x{height} creado.");
+        SetFeedback($"Se ha creado un Grid de {width}x{height}.");
     }
 
     /**
@@ -121,34 +102,74 @@ public class GeneratorManager : MonoBehaviour
         return true;
     }
 
+    /**
+     * Limpiamos los datos del Grid actual
+     */
+    private void ResetGridData()
+    {
+        baseTiles = new TileType[width, height];
+        tileViews = new LevelEditorTileView[width, height];
+        boxPositions.Clear();
+        playerPos = null;
+    }
+
+    private void ClearVisualBoard()
+    {
+        if (boardParent == null) return;
+
+        for (int i = boardParent.childCount - 1; i >= 0; i--)
+        {
+            Destroy(boardParent.GetChild(i).gameObject);
+        }
+    }
+
+    private void ConfigureGridLayout()
+    {
+        if (gridLayoutGroup == null) return;
+
+        gridLayoutGroup.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        gridLayoutGroup.constraintCount = width;
+    }
+
+    private void SpawnGridTiles()
+    {
+        for (int y = height - 1; y >= 0; y--)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                //Spawn Tile
+                LevelEditorTileView tile = Instantiate(tilePrefab, boardParent);
+                tile.Init(this, new Vector2Int(x, y));
+                tileViews[x, y] = tile;
+                RefreshTileVisual(x, y);
+            }
+        }
+    }
+
+    private void UpdateVisualGrid()
+    {
+        ClearVisualBoard();
+        ConfigureGridLayout();
+        SpawnGridTiles();
+    }
+
+    /**
+     * Pinta dependiendo del @currentBrush seleccionado en la posición @pos
+     */
     public void PaintAt(Vector2Int pos)
     {
-        if (!IsInside(pos) || baseTiles == null) return;
+        if (baseTiles == null || !IsInside(pos)) return;
 
         switch (currentBrush)
         {
             case GeneratorBrushType.Floor:
-                baseTiles[pos.x, pos.y] = TileType.Floor;
-                RemoveBoxAt(pos);
-                RemovePlayerAt(pos);
-                break;
-
             case GeneratorBrushType.Wall:
-                baseTiles[pos.x, pos.y] = TileType.Wall;
-                RemoveBoxAt(pos);
-                RemovePlayerAt(pos);
-                break;
-
             case GeneratorBrushType.Goal:
-                baseTiles[pos.x, pos.y] = TileType.Goal;
-                RemoveBoxAt(pos);
-                RemovePlayerAt(pos);
+                PaintBaseTile(pos, currentBrush);
                 break;
 
             case GeneratorBrushType.Box:
-                if (baseTiles[pos.x, pos.y] == TileType.Wall)
-                    baseTiles[pos.x, pos.y] = TileType.Floor;
-
+                EnsureWalkableBase(pos);
                 RemovePlayerAt(pos);
 
                 if (!boxPositions.Contains(pos))
@@ -156,9 +177,8 @@ public class GeneratorManager : MonoBehaviour
                 break;
 
             case GeneratorBrushType.Player:
-                if (baseTiles[pos.x, pos.y] == TileType.Wall)
-                    baseTiles[pos.x, pos.y] = TileType.Floor;
-
+                EnsureWalkableBase(pos);
+                RemoveBoxAt(pos);
                 playerPos = pos;
                 break;
         }
@@ -166,45 +186,95 @@ public class GeneratorManager : MonoBehaviour
         RefreshAllVisuals();
     }
 
+    /**
+     * Pinta un Tile Base (Floor, Wall, Goal). Elimina el objeto que habia en esa posicion.
+     */
+    private void PaintBaseTile(Vector2Int pos, GeneratorBrushType brush)
+    {
+        baseTiles[pos.x, pos.y] = brush switch
+        {
+            GeneratorBrushType.Floor => TileType.Floor,
+            GeneratorBrushType.Wall => TileType.Wall,
+            GeneratorBrushType.Goal => TileType.Goal,
+            _ => baseTiles[pos.x, pos.y]
+        };
+
+        RemoveBoxAt(pos);
+        RemovePlayerAt(pos);
+    }
+
+    /**
+     * Si el Player se coloca encima de un Wall, lo convierte a Floor.
+     */
+    private void EnsureWalkableBase(Vector2Int pos)
+    {
+        if (baseTiles[pos.x, pos.y] == TileType.Wall)
+            baseTiles[pos.x, pos.y] = TileType.Floor;
+    }
+
     public void ExportLevel()
     {
-        if (baseTiles == null)
-        {
-            SetFeedback("Primero crea un grid.");
-            return;
-        }
+        if (!CanExportLevel()) return;
 
-        int goalCount = CountGoals();
-        int boxCount = boxPositions.Count;
-        int playerCount = playerPos.HasValue ? 1 : 0;
-
-        if (playerCount < 1)
-        {
-            SetFeedback("Debe existir al menos 1 Player.");
-            return;
-        }
-
-        if (goalCount < boxCount)
-        {
-            SetFeedback($"Faltan Goals. Hay {boxCount} cajas y {goalCount} objetivos.");
-            return;
-        }
-
-        string txt = BuildLevelText();
         string folderPath = Path.Combine(Application.dataPath, levelsFolderName);
+        Directory.CreateDirectory(folderPath);
 
-        if (!Directory.Exists(folderPath))
-            Directory.CreateDirectory(folderPath);
+        string filePath = GetExportFilePath(folderPath);
+        File.WriteAllText(filePath, BuildLevelText());
 
-        string filePath = GetNextAvailableLevelPath(folderPath);
+        string exportedLevelName = Path.GetFileNameWithoutExtension(filePath);
 
-        File.WriteAllText(filePath, txt);
+        if (LevelSelectorManager.Instance != null)
+        {
+            LevelSelectorManager.Instance.SetLoadedLevel(exportedLevelName);
+        }
 
 #if UNITY_EDITOR
         UnityEditor.AssetDatabase.Refresh();
 #endif
 
         SetFeedback($"Nivel exportado en:\n{filePath}");
+    }
+
+    private bool CanExportLevel()
+    {
+        if (baseTiles == null)
+        {
+            SetFeedback("Primero crea un grid.");
+            return false;
+        }
+
+        if (!playerPos.HasValue)
+        {
+            SetFeedback("Debe existir al menos 1 Player.");
+            return false;
+        }
+
+        int goalCount = CountGoals();
+        int boxCount = boxPositions.Count;
+
+        if (goalCount < boxCount)
+        {
+            SetFeedback($"Faltan Goals. Hay {boxCount} cajas y {goalCount} objetivos.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private string GetExportFilePath(string folderPath)
+    {
+        if (IsEditingExistingLevel())
+            return Path.Combine(folderPath, LevelSelectorManager.Instance.CurrentLevelName + ".txt");
+
+        return GetNextAvailableLevelPath(folderPath);
+    }
+
+    private bool IsEditingExistingLevel()
+    {
+        return LevelSelectorManager.Instance != null &&
+               LevelSelectorManager.Instance.IsEditingLoadedLevel &&
+               !string.IsNullOrEmpty(LevelSelectorManager.Instance.CurrentLevelName);
     }
 
     private string BuildLevelText()
@@ -344,16 +414,6 @@ public class GeneratorManager : MonoBehaviour
         tileViews[x, y].Refresh(sprite);
     }
 
-    private void ClearBoard()
-    {
-        if (boardParent == null) return;
-
-        for (int i = boardParent.childCount - 1; i >= 0; i--)
-        {
-            Destroy(boardParent.GetChild(i).gameObject);
-        }
-    }
-
     private void SetFeedback(string msg)
     {
         if (feedbackText != null)
@@ -361,4 +421,156 @@ public class GeneratorManager : MonoBehaviour
 
         Debug.Log(msg);
     }
+
+    //#### CARGAR UN NIVEL ####
+    public void LoadLevelFromFile()
+    {
+        if (levelToLoad == null)
+        {
+            SetFeedback("No hay ningún archivo de nivel asignado.");
+            return;
+        }
+
+        if (!TryParseLevelText(levelToLoad.text, out int loadedWidth, out int loadedHeight))
+            return;
+
+        width = loadedWidth;
+        height = loadedHeight;
+
+        if (widthInput != null) widthInput.text = width.ToString();
+        if (heightInput != null) heightInput.text = height.ToString();
+
+        UpdateVisualGrid();
+
+        SetFeedback($"Nivel cargado: {levelToLoad.name}");
+    }
+
+    private bool TryParseLevelText(string levelText, out int loadedWidth, out int loadedHeight)
+    {
+        loadedWidth = 0;
+        loadedHeight = 0;
+
+        if (string.IsNullOrWhiteSpace(levelText))
+        {
+            SetFeedback("El archivo está vacío.");
+            return false;
+        }
+
+        string[] lines = levelText
+            .Replace("\r", "")
+            .Split('\n', System.StringSplitOptions.RemoveEmptyEntries);
+
+        if (lines.Length < 2)
+        {
+            SetFeedback("Formato inválido. Falta cabecera o mapa.");
+            return false;
+        }
+
+        string[] sizeParts = lines[0].Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
+
+        if (sizeParts.Length < 2 ||
+            !int.TryParse(sizeParts[0], out loadedWidth) ||
+            !int.TryParse(sizeParts[1], out loadedHeight))
+        {
+            SetFeedback("La primera línea debe tener: width height");
+            return false;
+        }
+
+        if (lines.Length - 1 < loadedHeight)
+        {
+            SetFeedback("El archivo no tiene suficientes filas.");
+            return false;
+        }
+
+        baseTiles = new TileType[loadedWidth, loadedHeight];
+        tileViews = new LevelEditorTileView[loadedWidth, loadedHeight];
+        boxPositions.Clear();
+        playerPos = null;
+
+        for (int y = 0; y < loadedHeight; y++)
+        {
+            string line = lines[y + 1];
+
+            if (line.Length < loadedWidth)
+            {
+                SetFeedback($"La fila {y + 1} tiene menos columnas de las esperadas.");
+                return false;
+            }
+
+            for (int x = 0; x < loadedWidth; x++)
+            {
+                Vector2Int pos = new Vector2Int(x, y);
+                char c = line[x];
+
+                switch (c)
+                {
+                    case '#':
+                        baseTiles[x, y] = TileType.Wall;
+                        break;
+
+                    case '.':
+                        baseTiles[x, y] = TileType.Floor;
+                        break;
+
+                    case 'G':
+                        baseTiles[x, y] = TileType.Goal;
+                        break;
+
+                    case 'B':
+                        baseTiles[x, y] = TileType.Floor;
+                        boxPositions.Add(pos);
+                        break;
+
+                    case 'P':
+                        baseTiles[x, y] = TileType.Floor;
+                        playerPos = pos;
+                        break;
+
+                    case '*':
+                        baseTiles[x, y] = TileType.Goal;
+                        boxPositions.Add(pos);
+                        break;
+
+                    case '+':
+                        baseTiles[x, y] = TileType.Goal;
+                        playerPos = pos;
+                        break;
+
+                    default:
+                        SetFeedback($"Carácter inválido '{c}' en ({x}, {y}).");
+                        return false;
+                }
+            }
+        }
+
+        if (playerPos == null)
+        {
+            SetFeedback("El nivel no contiene Player.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private void GetFileToLoad(string levelName)
+    {
+        if (string.IsNullOrEmpty(levelName))
+        {
+            SetFeedback("Nombre de nivel inválido.");
+            UpdateGrid();
+            return;
+        }
+
+        TextAsset file = Resources.Load<TextAsset>($"Levels/{levelName}");
+
+        if (file == null)
+        {
+            SetFeedback($"No se encontró el nivel: {levelName}");
+            UpdateGrid();
+            return;
+        }
+
+        levelToLoad = file;
+    }
+
 }
